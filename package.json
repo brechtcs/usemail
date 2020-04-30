@@ -1,6 +1,6 @@
 {
   "name": "usemail",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Middleware framework for SMTP servers",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,7 @@
   "dependencies": {
     "call-me-maybe": "^1.0.1",
     "callbox": "^1.0.0",
+    "mailparser": "^2.7.7",
     "smtp-server": "^3.6.0"
   },
   "devDependencies": {

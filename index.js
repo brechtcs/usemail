@@ -1,4 +1,5 @@
 var { SMTPServer } = require('smtp-server')
+var { simpleParser } = require('mailparser')
 var Emitter = require('events')
 var assert = require('assert')
 var maybe = require('call-me-maybe')
@@ -43,6 +44,17 @@ class Usemail extends Emitter {
   use (fn) {
     assert(typeof fn === 'function', 'Usemail handler should be function')
     this[HANDLERS].push(fn)
+  }
+
+  parse (opts) {
+    return async function parser (session, ctx) {
+      var data = await simpleParser(ctx.stream, opts)
+
+      Object.defineProperty(ctx, 'data', {
+        value: data,
+        enumerable: true
+      })
+    }
   }
 
   listen (port, cb) {

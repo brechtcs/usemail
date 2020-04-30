@@ -46,17 +46,6 @@ class Usemail extends Emitter {
     this[HANDLERS].push(fn)
   }
 
-  parse (opts) {
-    return async function parser (session, ctx) {
-      var data = await simpleParser(ctx.stream, opts)
-
-      Object.defineProperty(ctx, 'data', {
-        value: data,
-        enumerable: true
-      })
-    }
-  }
-
   listen (port, cb) {
     var settings = Object.assign({}, this.opts)
     settings.onData = this.onData.bind(this)
@@ -110,9 +99,21 @@ class Usemail extends Emitter {
   }
 }
 
+function parse (opts) {
+  return async function parser (session, ctx) {
+    var data = await simpleParser(ctx.stream, opts)
+
+    Object.defineProperty(ctx, 'data', {
+      value: data,
+      enumerable: true
+    })
+  }
+}
+
 function factory (opts) {
   return new Usemail(opts)
 }
 
 module.exports = factory
+module.exports.parse = parse
 module.exports.Usemail = Usemail

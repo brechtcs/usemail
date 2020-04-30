@@ -1,0 +1,36 @@
+{
+  "name": "usemail",
+  "version": "0.2.0",
+  "description": "Middleware framework for SMTP servers",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test.js && standard"
+  },
+  "dependencies": {
+    "call-me-maybe": "^1.0.1",
+    "callbox": "^1.0.0",
+    "smtp-server": "^3.6.0"
+  },
+  "devDependencies": {
+    "nodemailer": "^6.4.6",
+    "standard": "^14.3.3",
+    "tape": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brechtcs/usemail.git"
+  },
+  "keywords": [
+    "email",
+    "smtp",
+    "server",
+    "nodejs",
+    "middleware"
+  ],
+  "author": "Brecht Savelkoul <brecht.savelkoul@gmail.com>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/brechtcs/usemail/issues"
+  },
+  "homepage": "https://github.com/brechtcs/usemail#readme"
+}

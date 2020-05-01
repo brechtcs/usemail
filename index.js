@@ -86,7 +86,7 @@ class Usemail extends Emitter {
    * SMTP handlers:
    */
   async onData (stream, session, done) {
-    var context, error, handler
+    var context, handler
     context = new UsemailContext(stream)
 
     for await (handler of this[HANDLERS]) {

@@ -1,4 +1,4 @@
-var nodemailer = require('nodemailer')
+var { sendMail } = require('usemail-test-utils')
 var test = require('tape')
 var usemail = require('./')
 
@@ -91,19 +91,3 @@ test('terminate handling', async function (t) {
   server.close()
   t.end()
 })
-
-function sendMail (port, data) {
-  var mail = Object.assign({
-    from: 'Someone <some@example.com>',
-    to: 'Another <other@example.com>',
-    subject: 'Literally anything',
-    text: '...'
-  }, data)
-
-  return nodemailer.createTransport({
-    host: '127.0.0.1',
-    port: port,
-    secure: false,
-    ignoreTLS: true
-  }).sendMail(mail)
-}

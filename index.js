@@ -6,6 +6,7 @@ var maybe = require('call-me-maybe')
 var promise = require('callbox')
 
 var DONE = Symbol('done')
+var ERROR = Symbol('error')
 var HANDLERS = Symbol('Usemail handlers')
 var SERVER = Symbol('SMTP server')
 var STREAM = Symbol('SMTP stream')
@@ -23,6 +24,14 @@ class UsemailContext {
 
   get done () {
     return this[DONE]
+  }
+
+  get externalError () {
+    return this[ERROR] ? new Error('Something went wrong') : null
+  }
+
+  get internalError () {
+    return this[ERROR] || null
   }
 
   get stream () {
@@ -79,23 +88,23 @@ class Usemail extends Emitter {
   async onData (stream, session, done) {
     var context, error, handler
     context = new UsemailContext(stream)
-    error = null
 
     for await (handler of this[HANDLERS]) {
       try {
         await handler.call(this, session, context)
         if (context.done) break
-      } catch (e) {
-        error = new Error('Failed to process mail')
-        e.session = session
-        this.emit('error', e)
+      } catch (err) {
+        context[ERROR] = err
         break
       }
     }
 
-    // Stream must be completed to end request
+    // Stream must be fully consumed to end request
     for await (var chunk of stream) {} // eslint-disable-line
-    done(error)
+
+    context.end()
+    this.emit('bye', session, context)
+    done(context.externalError)
   }
 }
 

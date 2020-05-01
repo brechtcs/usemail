@@ -58,7 +58,6 @@ test('terminate handling', async function (t) {
   server.use(function end (session, ctx) {
     if (session.envelope.mailFrom.address === 'third@example.com') {
       ctx.end()
-      this.emit('info', 'finished handling third')
     }
   })
 
@@ -66,16 +65,22 @@ test('terminate handling', async function (t) {
     t.fail()
   })
 
-  server.on('error', function errors (err) {
-    switch (err.session.envelope.mailFrom.address) {
-      case 'first@example.com': return t.equal(err.message, 'synchronous error')
-      case 'second@example.com': return t.equal(err.message, 'asynchronous error')
-      default: return t.fail()
-    }
-  })
+  server.on('bye', function (session, ctx) {
+    t.ok(ctx.done)
 
-  server.on('info', function info (msg) {
-    t.equal(msg, 'finished handling third')
+    if (session.envelope.mailFrom.address === 'first@example.com') {
+      t.ok(ctx.internalError)
+      t.ok(ctx.externalError)
+      t.equal(ctx.internalError.message, 'synchronous error')
+      t.equal(ctx.externalError.message, 'Something went wrong')
+    }
+    if (session.envelope.mailFrom.address === 'second@example.com') {
+      t.equal(ctx.internalError.message, 'asynchronous error')
+    }
+    if (session.envelope.mailFrom.address === 'third@example.com') {
+      t.notOk(ctx.internalError)
+      t.notOk(ctx.externalError)
+    }
   })
 
   await server.listen()

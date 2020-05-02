@@ -7,8 +7,8 @@
     "test": "tape test.js && standard"
   },
   "dependencies": {
+    "await-callback": "^1.0.0",
     "call-me-maybe": "^1.0.1",
-    "callbox": "^1.0.0",
     "mailparser": "^2.7.7",
     "smtp-server": "^3.6.0"
   },

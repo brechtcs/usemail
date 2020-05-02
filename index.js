@@ -3,7 +3,7 @@ var { simpleParser } = require('mailparser')
 var Emitter = require('events')
 var assert = require('assert')
 var maybe = require('call-me-maybe')
-var promise = require('callbox')
+var promise = require('await-callback')
 
 var DONE = Symbol('done')
 var ERROR = Symbol('error')

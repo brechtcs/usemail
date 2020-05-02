@@ -5,17 +5,19 @@ var assert = require('assert')
 var maybe = require('call-me-maybe')
 var promise = require('await-callback')
 
+var CONTEXTS = Symbol('Usemail context')
 var DONE = Symbol('done')
 var ERROR = Symbol('error')
 var HANDLERS = Symbol('Usemail handlers')
+var PHASE = Symbol('phase')
 var SERVER = Symbol('SMTP server')
 var STREAM = Symbol('SMTP stream')
 var TCP = Symbol('TCP server')
 
 class UsemailContext {
-  constructor (stream) {
+  constructor () {
     this[DONE] = false
-    this[STREAM] = stream
+    this[PHASE] = 'from'
   }
 
   end () {
@@ -34,6 +36,10 @@ class UsemailContext {
     return this[ERROR] || null
   }
 
+  get phase () {
+    return this[PHASE]
+  }
+
   get stream () {
     return this[STREAM]
   }
@@ -43,21 +49,42 @@ class Usemail extends Emitter {
   constructor (opts) {
     super()
     this.opts = opts || {}
-    this[HANDLERS] = []
+
+    this[CONTEXTS] = new WeakMap()
+    this[HANDLERS] = {
+      from: [],
+      to: [],
+      data: []
+    }
   }
 
   close () {
-    if (this[SERVER]) this[SERVER].close()
+    if (this[SERVER]) {
+      return promise(done => this[SERVER].close(done))
+    }
+  }
+
+  from (fn) {
+    assert(typeof fn === 'function', 'Usemail handler should be function')
+    this[HANDLERS].from.push(fn)
+  }
+
+  to (fn) {
+    assert(typeof fn === 'function', 'Usemail handler should be function')
+    this[HANDLERS].to.push(fn)
   }
 
   use (fn) {
     assert(typeof fn === 'function', 'Usemail handler should be function')
-    this[HANDLERS].push(fn)
+    this[HANDLERS].data.push(fn)
   }
 
   listen (port, cb) {
     var settings = Object.assign({}, this.opts)
+    settings.onMailFrom = this.onMailFrom.bind(this)
+    settings.onRcptTo = this.onRcptTo.bind(this)
     settings.onData = this.onData.bind(this)
+    settings.onClose = this.onClose.bind(this)
 
     var server = new SMTPServer(settings)
     var p = promise(done => {
@@ -85,11 +112,51 @@ class Usemail extends Emitter {
   /**
    * SMTP handlers:
    */
+  async onMailFrom (addr, session, done) {
+    var context, handler
+    context = new UsemailContext()
+    this[CONTEXTS].set(session, context)
+    this.emit('from', session, context)
+
+    for await (handler of this[HANDLERS].from) {
+      try {
+        await handler.call(this, addr, session, context)
+        if (context.done) break
+      } catch (err) {
+        context[ERROR] = err
+        break
+      }
+    }
+
+    done(context.externalError)
+  }
+
+  async onRcptTo (addr, session, done) {
+    var context, handler
+    context = this[CONTEXTS].get(session)
+    context[PHASE] = 'to'
+    this.emit('to', session, context)
+
+    for await (handler of this[HANDLERS].to) {
+      try {
+        await handler.call(this, addr, session, context)
+        if (context.done) break
+      } catch (err) {
+        context[ERROR] = err
+        break
+      }
+    }
+
+    done(context.externalError)
+  }
+
   async onData (stream, session, done) {
     var context, handler
-    context = new UsemailContext(stream)
+    context = this[CONTEXTS].get(session)
+    context[PHASE] = 'data'
+    context[STREAM] = stream
 
-    for await (handler of this[HANDLERS]) {
+    for await (handler of this[HANDLERS].data) {
       try {
         await handler.call(this, session, context)
         if (context.done) break
@@ -105,6 +172,13 @@ class Usemail extends Emitter {
     context.end()
     this.emit('bye', session, context)
     done(context.externalError)
+  }
+
+  onClose (session) {
+    var context = this[CONTEXTS].get(session)
+    if (context.done) return
+    context.end()
+    this.emit('bye', session, context)
   }
 }
 

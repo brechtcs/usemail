@@ -1,6 +1,6 @@
 {
   "name": "usemail",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Middleware framework for SMTP servers",
   "main": "index.js",
   "scripts": {

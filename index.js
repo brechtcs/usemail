@@ -132,22 +132,23 @@ class Usemail extends Emitter {
   }
 
   async onRcptTo (addr, session, done) {
-    var context, handler
+    var context, error, handler
     context = this[CONTEXTS].get(session)
     context[PHASE] = 'to'
     this.emit('to', session, context)
+    error = null
 
     for await (handler of this[HANDLERS].to) {
       try {
         await handler.call(this, addr, session, context)
         if (context.done) break
       } catch (err) {
-        context[ERROR] = err
+        error = new Error('Recipient rejected: ' + addr.address)
         break
       }
     }
 
-    done(context.externalError)
+    done(error)
   }
 
   async onData (stream, session, done) {

@@ -92,12 +92,14 @@ test('terminate handling', async function (t) {
 })
 
 test('handle from/to phases', async function (t) {
+  var data = false
   var server = usemail({ authOptional: true })
 
   server.use(function (session, ctx) {
     t.equal(ctx.phase, 'data')
     t.equal(ctx.some, 'stuff')
     t.equal(ctx.more, 'things')
+    data = true
   })
 
   server.to(function (rcpt, session, ctx) {
@@ -125,12 +127,13 @@ test('handle from/to phases', async function (t) {
   await server.listen()
   await sendMail(server.port, {
     from: 'me@localhost',
-    to: ['you@localhost', 'they@otherhost']
+    to: ['they@otherhost', 'you@localhost']
   }).catch(function (err) {
     t.ok(err)
   })
 
   await server.close()
+  t.ok(data)
   t.end()
 })
 

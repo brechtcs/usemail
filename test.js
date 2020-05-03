@@ -128,8 +128,6 @@ test('handle from/to phases', async function (t) {
   await sendMail(server.port, {
     from: 'me@localhost',
     to: ['they@otherhost', 'you@localhost']
-  }).catch(function (err) {
-    t.ok(err)
   })
 
   await server.close()

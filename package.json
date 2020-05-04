@@ -1,7 +1,7 @@
 {
   "name": "usemail",
-  "version": "0.4.1",
-  "description": "Middleware framework for SMTP servers",
+  "version": "0.4.2",
+  "description": "Extendable framework for SMTP servers",
   "main": "index.js",
   "scripts": {
     "test": "tape test.js && standard"
@@ -26,7 +26,9 @@
     "smtp",
     "server",
     "nodejs",
-    "middleware"
+    "extendable",
+    "middleware",
+    "plugins"
   ],
   "author": "Brecht Savelkoul <brecht.savelkoul@gmail.com>",
   "license": "Apache-2.0",

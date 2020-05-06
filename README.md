@@ -27,8 +27,8 @@ var storage = new Map()
 mail.from(spf())
 mail.to(filter.allow({ addresses: ['some@example.com'] })
 mail.use(usemail.parse())
-mail.use(function (session, context) {
-  storage.set(context.data.id, context.data.text)
+mail.use(function (session) {
+  storage.set(session.get('id'), session.get('text'))
 })
 
 mail.listen(25)
@@ -38,7 +38,7 @@ This example creates a basic mail server that stores the text of incoming messag
 
 ## Plugins
 
-So far, the following Usemail plugins are available on <code>npm</code>:
+So far, the following Usemail plugins are available on `npm`:
 
 - [usemail-address-filter](https://npmjs.com/package/usemail-address-filter)
 - [usemail-spf](https://npmjs.com/package/usemail-spf)

@@ -1,21 +1,24 @@
 {
   "name": "usemail",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Extendable framework for SMTP servers",
   "main": "index.js",
   "scripts": {
+    "prepack": "npm test",
     "test": "tape test.js && standard"
   },
   "dependencies": {
     "await-callback": "^1.0.0",
     "call-me-maybe": "^1.0.1",
     "mailparser": "^2.7.7",
-    "smtp-server": "^3.6.0"
+    "smtp-server": "^3.6.0",
+    "stdopt": "^12.0.0",
+    "stdprop": "^1.0.2"
   },
   "devDependencies": {
     "standard": "^14.3.3",
     "tape": "^5.0.0",
-    "usemail-test-utils": "^1.0.1"
+    "usemail-test-utils": "^1.1.0"
   },
   "repository": {
     "type": "git",

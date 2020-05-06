@@ -1,4 +1,5 @@
 var { sendMail } = require('usemail-test-utils')
+var Session = require('./lib/session')
 var promise = require('await-callback')
 var test = require('tape')
 var usemail = require('./')
@@ -7,30 +8,30 @@ test('chain middleware', async function (t) {
   var server = usemail({ authOptional: true })
   var id = null
 
-  server.use(function first (session, ctx) {
-    t.ok(ctx.stream)
-    t.ok(session)
-    t.equal(session.envelope.mailFrom.address, 'some@example.com')
-    t.equal(session.envelope.rcptTo[0].address, 'other@example.com')
-    t.equal(typeof ctx.stream.pipe, 'function')
-    ctx.promise = Promise.resolve(1)
+  server.use(function first (session, stream) {
+    t.ok(stream)
+    t.ok(session instanceof Session)
+    t.equal(session.from, 'some@example.com')
+    t.equal(session.to[0], 'other@example.com')
+    t.equal(typeof stream.pipe, 'function')
+    session.set('promise', Promise.resolve(1))
     id = session.id
   })
 
-  server.use(async function second (session, ctx) {
-    ctx.resolved = await ctx.promise
-    t.ok(ctx.promise)
-    t.equal(typeof ctx.promise.then, 'function')
-    t.equal(ctx.resolved, 1)
+  server.use(async function second (session) {
+    session.set('resolved', await session.get('promise'))
+    t.ok(session.get('promise'))
+    t.equal(typeof session.get('promise').then, 'function')
+    t.equal(session.get('resolved'), 1)
     t.equal(session.id, id)
   })
 
-  server.use(function third (session, ctx) {
-    t.ok(ctx.stream)
-    t.ok(ctx.promise)
-    t.equal(ctx.resolved, 1)
-    t.equal(session.envelope.mailFrom.address, 'some@example.com')
-    t.equal(session.envelope.rcptTo[0].address, 'other@example.com')
+  server.use(function third (session, stream) {
+    t.ok(stream)
+    t.ok(session.get('promise'))
+    t.equal(session.get('resolved'), 1)
+    t.equal(session.from, 'some@example.com')
+    t.equal(session.to[0], 'other@example.com')
     t.equal(session.id, id)
   })
 
@@ -44,20 +45,20 @@ test('terminate handling', async function (t) {
   var server = usemail({ authOptional: true })
 
   server.use(function synchronous (session) {
-    if (session.envelope.mailFrom.address === 'first@example.com') {
+    if (session.from === 'first@example.com') {
       throw new Error('synchronous error')
     }
   })
 
   server.use(function asynchronous (session) {
-    if (session.envelope.mailFrom.address === 'second@example.com') {
+    if (session.from === 'second@example.com') {
       throw new Error('asynchronous error')
     }
   })
 
-  server.use(function end (session, ctx) {
-    if (session.envelope.mailFrom.address === 'third@example.com') {
-      ctx.end()
+  server.use(function end (session) {
+    if (session.from === 'third@example.com') {
+      session.end()
     }
   })
 
@@ -65,28 +66,28 @@ test('terminate handling', async function (t) {
     t.fail()
   })
 
-  server.on('bye', function (session, ctx) {
-    t.ok(ctx.done)
+  server.on('bye', function (session) {
+    t.equal(session.phase, 'done')
 
-    if (session.envelope.mailFrom.address === 'first@example.com') {
-      t.ok(ctx.internalError)
-      t.ok(ctx.externalError)
-      t.equal(ctx.internalError.message, 'synchronous error')
-      t.equal(ctx.externalError.message, 'Something went wrong')
+    if (session.from === 'first@example.com') {
+      t.ok(session.serverError)
+      t.ok(session.clientError)
+      t.equal(session.serverError.message, 'synchronous error')
+      t.equal(session.clientError.message, 'Something went wrong')
     }
-    if (session.envelope.mailFrom.address === 'second@example.com') {
-      t.equal(ctx.internalError.message, 'asynchronous error')
+    if (session.from === 'second@example.com') {
+      t.equal(session.serverError.message, 'asynchronous error')
     }
-    if (session.envelope.mailFrom.address === 'third@example.com') {
-      t.notOk(ctx.internalError)
-      t.notOk(ctx.externalError)
+    if (session.from === 'third@example.com') {
+      t.notOk(session.serverError)
+      t.notOk(session.clientError)
     }
   })
 
   await server.listen()
   await sendMail(server.port, { from: 'first@example.com' }).catch(e => t.ok(e))
   await sendMail(server.port, { from: 'second@example.com' }).catch(e => t.ok(e))
-  await sendMail(server.port, { from: 'third@example.com' })
+  await sendMail(server.port, { from: 'third@example.com' }).catch(() => t.fail())
   await server.close()
   t.end()
 })
@@ -95,33 +96,33 @@ test('handle from/to phases', async function (t) {
   var data = false
   var server = usemail({ authOptional: true })
 
-  server.use(function (session, ctx) {
-    t.equal(ctx.phase, 'data')
-    t.equal(ctx.some, 'stuff')
-    t.equal(ctx.more, 'things')
+  server.use(function (session) {
+    t.equal(session.phase, 'use')
+    t.equal(session.get('some'), 'stuff')
+    t.equal(session.get('more'), 'things')
     data = true
   })
 
-  server.to(function (rcpt, session, ctx) {
+  server.to(function (session, rcpt) {
     if (!rcpt.address.endsWith('@localhost')) {
       throw new Error('Unknown recipient')
     }
-    t.ok(session.envelope.mailFrom)
-    t.equal(session.envelope.mailFrom.address, 'me@localhost')
-    t.equal(ctx.phase, 'to')
-    t.equal(ctx.some, 'stuff')
-    ctx.more = 'things'
+    t.equal(session.from, 'me@localhost')
+    t.equal(session.phase, 'to')
+    t.equal(session.get('some'), 'stuff')
+    session.set('some', 'other stuff')
+    session.set('more', 'things')
   })
 
-  server.from(function (sender, session, ctx) {
+  server.from(function (session, sender) {
     t.ok(sender.address)
-    t.equal(ctx.phase, 'from')
-    ctx.some = 'stuff'
+    t.equal(session.phase, 'from')
+    session.set('some', 'stuff', true)
   })
 
   server.on('bye', function (session) {
-    t.equal(session.envelope.rcptTo.length, 1)
-    t.deepEqual(session.envelope.rcptTo[0], { address: 'you@localhost', args: false })
+    t.equal(session.to.length, 1)
+    t.equal(session.to[0], 'you@localhost')
   })
 
   await server.listen()
@@ -145,9 +146,9 @@ test('always emit bye', async function (t) {
       throw new Error('None shall pass')
     })
 
-    server.on('bye', function (session, context) {
+    server.on('bye', function (session) {
       bye = true
-      t.ok(context.done)
+      t.equal(session.phase, 'done')
       done()
     })
 

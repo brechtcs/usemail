@@ -1,61 +1,28 @@
 var { SMTPServer } = require('smtp-server')
 var { simpleParser } = require('mailparser')
 var Emitter = require('events')
+var UsemailSession = require('./lib/session')
 var assert = require('assert')
 var maybe = require('call-me-maybe')
 var promise = require('await-callback')
+var prop = require('stdprop')
 
-var CONTEXTS = Symbol('Usemail context')
-var DONE = Symbol('done')
-var ERROR = Symbol('error')
-var HANDLERS = Symbol('Usemail handlers')
-var PHASE = Symbol('phase')
+var CLOSED = Symbol('Closed sessions')
 var SERVER = Symbol('SMTP server')
-var STREAM = Symbol('SMTP stream')
 var TCP = Symbol('TCP server')
-
-class UsemailContext {
-  constructor () {
-    this[DONE] = false
-    this[PHASE] = 'from'
-  }
-
-  end () {
-    this[DONE] = true
-  }
-
-  get done () {
-    return this[DONE]
-  }
-
-  get externalError () {
-    return this[ERROR] ? new Error('Something went wrong') : null
-  }
-
-  get internalError () {
-    return this[ERROR] || null
-  }
-
-  get phase () {
-    return this[PHASE]
-  }
-
-  get stream () {
-    return this[STREAM]
-  }
-}
 
 class Usemail extends Emitter {
   constructor (opts) {
     super()
-    this.opts = opts || {}
 
-    this[CONTEXTS] = new WeakMap()
-    this[HANDLERS] = {
+    this.opts = opts || {}
+    this.handlers = {
       from: [],
       to: [],
-      data: []
+      use: []
     }
+
+    prop(this, CLOSED, new WeakSet())
   }
 
   close () {
@@ -66,17 +33,17 @@ class Usemail extends Emitter {
 
   from (fn) {
     assert(typeof fn === 'function', 'Usemail handler should be function')
-    this[HANDLERS].from.push(fn)
+    this.handlers.from.push(fn)
   }
 
   to (fn) {
     assert(typeof fn === 'function', 'Usemail handler should be function')
-    this[HANDLERS].to.push(fn)
+    this.handlers.to.push(fn)
   }
 
   use (fn) {
     assert(typeof fn === 'function', 'Usemail handler should be function')
-    this[HANDLERS].data.push(fn)
+    this.handlers.use.push(fn)
   }
 
   listen (port, cb) {
@@ -114,36 +81,40 @@ class Usemail extends Emitter {
    */
   async onMailFrom (addr, session, done) {
     var context, handler
-    context = new UsemailContext()
-    this[CONTEXTS].set(session, context)
-    this.emit('from', session, context)
+    context = UsemailSession.for(session)
+    context.phase = 'from'
+    this.emit('from', addr, context)
 
-    for await (handler of this[HANDLERS].from) {
+    for await (handler of this.handlers.from) {
       try {
-        await handler.call(this, addr, session, context)
-        if (context.done) break
+        if (context.phase !== 'from') break
+        await handler.call(this, context, addr)
       } catch (err) {
-        context[ERROR] = err
+        context.end(err)
         break
       }
     }
 
-    done(context.externalError)
+    done(context.clientError)
   }
 
   async onRcptTo (addr, session, done) {
     var context, error, handler
-    context = this[CONTEXTS].get(session)
-    context[PHASE] = 'to'
-    this.emit('to', session, context)
-    error = null
+    context = UsemailSession.for(session)
+    context.phase = 'to'
+    this.emit('to', addr, context)
 
-    for await (handler of this[HANDLERS].to) {
+    for await (handler of this.handlers.to) {
       try {
-        await handler.call(this, addr, session, context)
-        if (context.done) break
+        if (context.phase !== 'to') break
+        await handler.call(this, context, addr)
       } catch (err) {
-        error = new Error('Recipient rejected: ' + addr.address)
+        error = new Error('Something went wrong')
+        break
+      }
+
+      if (context.serverError) {
+        error = context.clientError
         break
       }
     }
@@ -153,16 +124,15 @@ class Usemail extends Emitter {
 
   async onData (stream, session, done) {
     var context, handler
-    context = this[CONTEXTS].get(session)
-    context[PHASE] = 'data'
-    context[STREAM] = stream
+    context = UsemailSession.for(session)
+    context.phase = 'use'
 
-    for await (handler of this[HANDLERS].data) {
+    for await (handler of this.handlers.use) {
       try {
-        await handler.call(this, session, context)
-        if (context.done) break
+        if (context.phase !== 'use') break
+        await handler.call(this, context, stream)
       } catch (err) {
-        context[ERROR] = err
+        context.end(err)
         break
       }
     }
@@ -171,26 +141,22 @@ class Usemail extends Emitter {
     for await (var chunk of stream) {} // eslint-disable-line
 
     context.end()
-    this.emit('bye', session, context)
-    done(context.externalError)
+    this.emit('bye', context)
+    this[CLOSED].add(session)
+    done(context.clientError)
   }
 
   onClose (session) {
-    var context = this[CONTEXTS].get(session)
-    if (context.done) return
-    context.end()
-    this.emit('bye', session, context)
+    if (this[CLOSED].has(session)) return
+    this.emit('bye', UsemailSession.for(session))
   }
 }
 
 function parse (opts) {
-  return async function parser (session, ctx) {
-    var data = await simpleParser(ctx.stream, opts)
-
-    Object.defineProperty(ctx, 'data', {
-      value: data,
-      enumerable: true
-    })
+  return async function parser (session, stream) {
+    var data = await simpleParser(stream, opts)
+    var token = Math.random()
+    Object.keys(data).forEach(prop => session.set(prop, data[prop], token))
   }
 }
 

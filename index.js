@@ -115,6 +115,7 @@ class Usemail extends Emitter {
 
       if (context.serverError) {
         error = context.clientError
+        context.fail(null, true)
         break
       }
     }

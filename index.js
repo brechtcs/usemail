@@ -17,6 +17,7 @@ class Usemail extends Emitter {
 
     this.opts = opts || {}
     this.handlers = {
+      connect: [],
       from: [],
       to: [],
       use: []
@@ -29,6 +30,11 @@ class Usemail extends Emitter {
     if (this[SERVER]) {
       return promise(done => this[SERVER].close(done))
     }
+  }
+
+  connect (fn) {
+    assert(typeof fn === 'function', 'Usemail handler should be function')
+    this.handlers.connect.push(fn)
   }
 
   from (fn) {
@@ -48,6 +54,7 @@ class Usemail extends Emitter {
 
   listen (port, cb) {
     var settings = Object.assign({}, this.opts)
+    settings.onConnect = this.onConnect.bind(this)
     settings.onMailFrom = this.onMailFrom.bind(this)
     settings.onRcptTo = this.onRcptTo.bind(this)
     settings.onData = this.onData.bind(this)
@@ -79,6 +86,25 @@ class Usemail extends Emitter {
   /**
    * SMTP handlers:
    */
+  async onConnect (session, done) {
+    var context, handler
+    context = UsemailSession.for(session)
+    context.phase = 'connect'
+    this.emit('connect', context)
+
+    for await (handler of this.handlers.connect) {
+      try {
+        if (context.phase !== 'connect') break
+        await handler.call(this, context)
+      } catch (err) {
+        context.end(err)
+        break
+      }
+    }
+
+    done(context.clientError)
+  }
+
   async onMailFrom (addr, session, done) {
     var context, handler
     context = UsemailSession.for(session)
